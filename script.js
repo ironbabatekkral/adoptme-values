@@ -25,7 +25,17 @@ const translations = {
         modal_fly: "Fly (F)",
         modal_fly_ride: "Fly & Ride (FR)",
         loading: "Loading pets...",
-        no_pets: "No items found..."
+        no_pets: "No items found...",
+        calc_toggle: "Calculator",
+        calc_title: "Trade Calculator",
+        calc_my_offer: "My Offer",
+        calc_their_offer: "Their Offer",
+        calc_total: "Total:",
+        calc_win: "Big Win!",
+        calc_small_win: "Win",
+        calc_fair: "Fair Trade",
+        calc_small_lose: "Lose",
+        calc_lose: "Big Lose!"
     },
     tr: {
         title: "Adopt Me <span>Değerleri</span>",
@@ -53,7 +63,17 @@ const translations = {
         modal_fly: "Uçan (F)",
         modal_fly_ride: "Uçan Binek (FR)",
         loading: "Yükleniyor...",
-        no_pets: "Eşya bulunamadı..."
+        no_pets: "Eşya bulunamadı...",
+        calc_toggle: "Hesap Makinesi",
+        calc_title: "Takas Hesaplayıcı",
+        calc_my_offer: "Benim Teklifim",
+        calc_their_offer: "Onların Teklifi",
+        calc_total: "Toplam:",
+        calc_win: "Büyük Kazanç!",
+        calc_small_win: "Kazanç",
+        calc_fair: "Adil Takas",
+        calc_small_lose: "Kayıp",
+        calc_lose: "Büyük Kayıp!"
     }
 };
 
@@ -74,9 +94,23 @@ const searchInput = document.getElementById('searchInput');
 const sortSelect = document.getElementById('sortSelect');
 const langSelect = document.getElementById('langSelect');
 
+// Calculator State & Elements
+let myOffer = [];
+let theirOffer = [];
+const calcToggleBtn = document.getElementById('calcToggleBtn');
+const calculatorPanel = document.getElementById('calculatorPanel');
+const closeCalcBtn = document.getElementById('closeCalcBtn');
+const btnMyOffer = document.getElementById('btnMyOffer');
+const btnTheirOffer = document.getElementById('btnTheirOffer');
+const myOfferList = document.getElementById('myOfferList');
+const theirOfferList = document.getElementById('theirOfferList');
+const myTotalValueEl = document.getElementById('myTotalValue');
+const theirTotalValueEl = document.getElementById('theirTotalValue');
+const calcStatus = document.getElementById('calcStatus');
+
 // Modal Elements
 const modal = document.getElementById('valueModal');
-const closeBtn = document.getElementById('closeModal');
+const closeBtn = document.getElementById('closeModalBtn');
 const modalPetImage = document.getElementById('modalPetImage');
 const modalPetName = document.getElementById('modalPetName');
 const modalPetRarity = document.getElementById('modalPetRarity');
@@ -118,17 +152,12 @@ function applyTranslations() {
         }
     });
 
+    // Re-render Calculator UI for translations
+    updateCalculatorUI();
+
     // Re-render strings in modal if open
     if (modal.classList.contains('active')) {
         renderValues();
-    }
-
-    // Re-render empty grid message if needed
-    if (allPets.length === 0 || grid.innerHTML.includes('No items')) {
-        if (grid.innerHTML.includes('<div')) {
-            // It's empty state
-            filterAndRender();
-        }
     }
 }
 
@@ -299,7 +328,7 @@ function formatVal(val) {
 function filterAndRender() {
     const q = searchInput.value.toLowerCase().trim();
 
-    let filtered = allPets;
+    let filtered = [...allPets]; // Shallow copy so we don't mutate the original array
 
     if (currentCategory !== 'all') {
         filtered = filtered.filter(p => p.type === currentCategory);
@@ -329,6 +358,122 @@ function filterAndRender() {
     renderGrid(filtered);
 }
 
+// ==========================================
+// CALCULATOR LOGIC
+// ==========================================
+
+function getSelectedValueData() {
+    if (!currentPet) return null;
+    if (currentPet.type !== 'pets') {
+        return { variant: 'regular', value: currentPet.value || 0 };
+    }
+    const data = currentPet[currentTab];
+    if (!data) return null;
+    // Assuming base value for now
+    return { variant: currentTab, value: data.value || 0 };
+}
+
+function addToOffer(side) {
+    const valData = getSelectedValueData();
+    if (!valData || !currentPet) return;
+
+    // Format image: same logic from renderMoreItems
+    let imgPath = 'images/placeholder.svg';
+    if (currentPet.image) {
+        const fileName = currentPet.image.split('/').pop();
+        imgPath = `images/${fileName}`;
+    }
+
+    const item = {
+        name: currentPet.name,
+        variant: valData.variant,
+        value: Number(valData.value),
+        image: imgPath,
+        id: Date.now() + Math.random() // Unique ID for removal
+    };
+
+    if (side === 'mine') {
+        myOffer.push(item);
+    } else {
+        theirOffer.push(item);
+    }
+
+    // Automatically open the calculator panel to show the item was added
+    calculatorPanel.classList.add('active');
+    updateCalculatorUI();
+}
+
+function removeFromOffer(side, id) {
+    if (side === 'mine') {
+        myOffer = myOffer.filter(i => i.id !== id);
+    } else {
+        theirOffer = theirOffer.filter(i => i.id !== id);
+    }
+    updateCalculatorUI();
+}
+
+function updateCalculatorUI() {
+    const t = translations[currentLang];
+
+    // Calculate Totals
+    const myTotal = myOffer.reduce((sum, item) => sum + item.value, 0);
+    const theirTotal = theirOffer.reduce((sum, item) => sum + item.value, 0);
+
+    myTotalValueEl.textContent = formatVal(myTotal);
+    theirTotalValueEl.textContent = formatVal(theirTotal);
+
+    // Update Indicators
+    let diff = myTotal - theirTotal;
+    // Positive diff means we give more (lose), negative means we receive more (win)
+
+    calcStatus.className = 'status-badge';
+
+    if (myTotal === 0 && theirTotal === 0) {
+        calcStatus.textContent = t.calc_fair;
+        calcStatus.classList.add('fair');
+    } else {
+        // Calculate percentage difference for coloring
+        const maxTotal = Math.max(myTotal, theirTotal);
+        const diffRatio = maxTotal > 0 ? Math.abs(diff) / maxTotal : 0;
+
+        if (diffRatio < 0.05) { // Within 5% is fair
+            calcStatus.textContent = t.calc_fair;
+            calcStatus.classList.add('fair');
+        } else if (diff > 0) { // We are offering more -> Lose
+            calcStatus.classList.add('lose');
+            calcStatus.textContent = diffRatio > 0.2 ? t.calc_lose : t.calc_small_lose;
+        } else { // We are offering less -> Win
+            calcStatus.classList.add('win');
+            calcStatus.textContent = diffRatio > 0.2 ? t.calc_win : t.calc_small_win;
+        }
+    }
+
+    // Render Lists
+    const renderList = (arr, el, sideStr) => {
+        el.innerHTML = arr.map(item => `
+            <div class="offer-item">
+                <div class="offer-item-info">
+                    <img src="${item.image}" alt="${item.name}" class="offer-item-img" onerror="this.src='images/placeholder.svg'">
+                    <div class="offer-item-details">
+                        <span class="offer-item-name">${item.name}</span>
+                        ${item.variant !== 'regular' && item.variant ? `<span class="offer-item-variant">${item.variant}</span>` : ''}
+                    </div>
+                </div>
+                <!-- Controls -->
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                    <span class="offer-item-value">${formatVal(item.value)}</span>
+                    <button class="remove-offer-btn" onclick="removeFromOffer('${sideStr}', ${item.id})" aria-label="Remove">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    };
+
+    renderList(myOffer, myOfferList, 'mine');
+    renderList(theirOffer, theirOfferList, 'theirs');
+}
+
 // Event Listeners
 searchInput.addEventListener('input', filterAndRender);
 
@@ -350,6 +495,19 @@ catBtns.forEach(btn => {
         filterAndRender();
     });
 });
+
+// Calculator toggles
+calcToggleBtn.addEventListener('click', () => {
+    calculatorPanel.classList.toggle('active');
+});
+
+closeCalcBtn.addEventListener('click', () => {
+    calculatorPanel.classList.remove('active');
+});
+
+// Add to offer buttons
+btnMyOffer.addEventListener('click', () => addToOffer('mine'));
+btnTheirOffer.addEventListener('click', () => addToOffer('theirs'));
 
 closeBtn.addEventListener('click', closeModal);
 
