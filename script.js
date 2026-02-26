@@ -83,6 +83,7 @@ let currentCategory = 'all';
 let currentSort = 'default';
 let currentPet = null;
 let currentTab = 'regular'; // 'regular', 'neon', 'mega'
+let currentPotion = 'no_potion'; // 'base', 'no_potion', 'ride', 'fly', 'fly_ride'
 
 let currentFilteredPets = [];
 let currentRenderedCount = 0;
@@ -253,6 +254,7 @@ function openModal(pet, imgPath) {
         setTab('regular');
     } else {
         tabsContainer.style.display = 'none';
+        currentPotion = 'base';
         renderSingleValue(pet);
     }
 
@@ -272,13 +274,16 @@ function setTab(tabId) {
         if (b.dataset.tab === tabId) b.classList.add('active');
     });
 
+    // Reset potion selection to no_potion when changing tabs
+    currentPotion = 'no_potion';
+
     renderValues();
 }
 
 function renderSingleValue(item) {
     const t = translations[currentLang];
     valuesGrid.innerHTML = `
-        <div class="val-item main">
+        <div class="val-item main active" onclick="selectPotion('base')">
             <span class="val-label">${t.modal_value}</span>
             <span class="val-number">${formatVal(item.value)}</span>
         </div>
@@ -297,27 +302,36 @@ function renderValues() {
     const t = translations[currentLang];
 
     valuesGrid.innerHTML = `
-        <div class="val-item main">
+        <div class="val-item ${currentPotion === 'base' ? 'active' : ''}" onclick="selectPotion('base')">
             <span class="val-label">${t.modal_base_value}</span>
             <span class="val-number">${formatVal(data.value)}</span>
         </div>
-        <div class="val-item">
+        <div class="val-item ${currentPotion === 'no_potion' ? 'active' : ''}" onclick="selectPotion('no_potion')">
             <span class="val-label">${t.modal_no_potion}</span>
             <span class="val-number">${formatVal(data.no_potion)}</span>
         </div>
-        <div class="val-item">
+        <div class="val-item ${currentPotion === 'ride' ? 'active' : ''}" onclick="selectPotion('ride')">
             <span class="val-label">${t.modal_ride}</span>
             <span class="val-number">${formatVal(data.ride)}</span>
         </div>
-        <div class="val-item">
+        <div class="val-item ${currentPotion === 'fly' ? 'active' : ''}" onclick="selectPotion('fly')">
             <span class="val-label">${t.modal_fly}</span>
             <span class="val-number">${formatVal(data.fly)}</span>
         </div>
-        <div class="val-item">
+        <div class="val-item ${currentPotion === 'fly_ride' ? 'active' : ''}" onclick="selectPotion('fly_ride')">
             <span class="val-label">${t.modal_fly_ride}</span>
             <span class="val-number">${formatVal(data.fly_ride)}</span>
         </div>
     `;
+}
+
+function selectPotion(potionId) {
+    currentPotion = potionId;
+    if (currentPet && currentPet.type === 'pets') {
+        renderValues();
+    } else {
+        renderSingleValue(currentPet);
+    }
 }
 
 function formatVal(val) {
@@ -369,8 +383,32 @@ function getSelectedValueData() {
     }
     const data = currentPet[currentTab];
     if (!data) return null;
-    // Assuming base value for now
-    return { variant: currentTab, value: data.value || 0 };
+
+    // Determine the exact value based on selected potion
+    let exactValue = 0;
+    let label = currentTab; // 'regular', 'neon', 'mega'
+
+    if (currentPotion === 'base') {
+        exactValue = data.value;
+    } else if (currentPotion === 'no_potion') {
+        exactValue = data.no_potion;
+        if (label === 'regular') label = 'No Potion';
+        else label += ' (No Potion)';
+    } else if (currentPotion === 'ride') {
+        exactValue = data.ride;
+        if (label === 'regular') label = 'R';
+        else label += ' R';
+    } else if (currentPotion === 'fly') {
+        exactValue = data.fly;
+        if (label === 'regular') label = 'F';
+        else label += ' F';
+    } else if (currentPotion === 'fly_ride') {
+        exactValue = data.fly_ride;
+        if (label === 'regular') label = 'FR';
+        else label += ' FR';
+    }
+
+    return { variant: label.toUpperCase(), value: exactValue || 0 };
 }
 
 function addToOffer(side) {
